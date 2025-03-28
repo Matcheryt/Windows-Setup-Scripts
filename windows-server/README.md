@@ -1,14 +1,14 @@
-# Win Server configuration via Powershell
+# Win Server Setup via Powershell
 
-- [Win Server configuration via Powershell](#win-server-configuration-via-powershell)
+- [Win Server Setup via Powershell](#win-server-setup-via-powershell)
   - [How to configure variables](#how-to-configure-variables)
     - [Network](#network)
     - [General](#general)
-    - [Domain And AD](#domain-and-ad)
+    - [Domain](#domain)
 
 ## How to configure variables
 
-The following variables need to be configured before running the script.
+You can configure the following variables before running the script by editing the file directly, or by running the script and changing them via the interactive menu.
 
 ```powershell
 # ---------------- VARIABLES ---------------- #
@@ -55,7 +55,7 @@ The rest of the network configuration is self-explanatory.
 `$hostname` - Hostname of the computer. Dependent on the `$joinToDomain` option (read below).  
 `$timezone` - The time zone that the computer will use. You can get a list of the available time zones by executing the command `Get-TimeZone -ListAvailable` in Powershell.
 
-### Domain And AD
+### Domain
 
 `$domain` - The domain that the computer will be joined to  
 `$domainAdminUser` - The username of the domain administrator, with permission to join computers to the domain  
