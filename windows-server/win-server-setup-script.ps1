@@ -4,6 +4,11 @@
 
 # ---------------- VARIABLES ---------------- #
 #
+# Keep track of steps failed during runtime
+$failureCount = 0
+# Warning message to show on the menu, if there is any
+$warningMessage = $null
+#
 # -------------- NETWORK --------------
 #
 $netInterfaceName = "Ethernet0"
@@ -11,8 +16,8 @@ $netInterfaceName = "Ethernet0"
 $enableIpv4 = $true
 $netInterfaceIpv4 = ""
 $netInterfaceGatewayv4 = ""
-$netInterfaceNetMaskv4 = ""
-$netInterfaceDnsv4 = ""
+$netInterfaceNetMaskv4 = "24"
+$netInterfaceDnsv4 = "1.1.1.1,1.0.0.1"
 # ------- IPV6
 $enableIpv6 = $false
 $netInterfaceIpv6 = "" 
@@ -21,19 +26,20 @@ $netInterfaceDnsv6 = ""
 #
 # -------------- GENERAL --------------
 #
-$hostname = "TESTE"
+$hostname = (hostname)
 $timezone = "GMT Standard Time" 
 #
 # -------------- DOMAIN ---------------
 #
-$domain = "ciseg.local.lan"
+$domain = $env:USERDNSDOMAIN
 $domainAdminUser = "Administrator"
 $joinToDomain = $false
 #
 # -------------- END VARIABLES -------------- #
 
-# Keep track of steps failed during runtime
-$failureCount = 0
+function Write-Success([string]$message) {
+    Write-Host $message -ForegroundColor Green
+}
 
 #region DISCLAIMER
 Write-Host @"
@@ -41,11 +47,11 @@ Write-Host @"
 !!!!! WARNING !!!!!
 This script changes system settings, and can potentially break things.
 Ensure you have a snapshot/backup before running this.
-"@ -ForegroundColor Black -BackgroundColor Yellow
+"@ -ForegroundColor Yellow -BackgroundColor Black
 
 do {
     $disclaimerInput = Read-Host "Do you want to continue? (Y/n)"
-} until ($disclaimerInput.ToUpper() -in "Y", "N")
+} until ($disclaimerInput -in "Y", "N")
 
 if ($disclaimerInput -eq "N") {
     Exit
@@ -56,6 +62,8 @@ cls
 
 #region USER_INPUTS
 while ($True) {
+
+    cls
 
     Write-Host @"
 
@@ -79,120 +87,124 @@ while ($True) {
 
 "@
 
-$option = Read-Host "Select an option to change or type 'start' to run the script with the options above" 
-
-if ($option.ToUpper() -eq "START"){
-    
-    # Verify everything is filled correctly before starting
-
-    # IPv4
-    if ($enableIpv4 -eq $true){
-        if (($netInterfaceName -eq "") -or
-            ($netInterfaceIpv4 -eq "") -or 
-            ($netInterfaceGatewayv4 -eq "") -or
-            ($netInterfaceNetMaskv4 -eq "") -or
-            ($netInterfaceDnsv4 -eq "")){
-                Write-Warning "IPv4 settings are missing. Script will not start."
-                return
-            }
+    if ($warningMessage -ne $null){
+        Write-Warning "$($warningMessage)"
+        Write-Host "" # Just for extra blank space. If I add a newline on the warning above, the background of the warning shifts down as well, so it needs to be like this.
     }
 
-    # IPv6
-    if ($enableIpv6 -eq $true){
-        if (($netInterfaceName -eq "") -or
-            ($netInterfaceIpv6 -eq "") -or 
-            ($netInterfaceGatewayv6 -eq "") -or
-            ($netInterfaceDnsv6 -eq "")){
-                Write-Warning "IPv6 settings are missing. Script will not start."
-                return
-            }
-    }
+    $option = Read-Host "Select an option to change or type 'start' to run the script with the options above" 
 
-    # Domain
-    if ($joinToDomain -eq $true){
-        if (($domain -eq "") -or
-            ($domainAdminUser -eq "") -or
-            ($hostname -eq "")){
-                Write-Warning "Domain settings are missing. Script will not start."
-                return
-            }
-    }
+    if ($option -eq "start"){
+        
+        # Verify everything is filled correctly before starting
 
-    break
-}
-
-switch ($option){
-    "1"     { 
-        Write-Host "Available Network Interfaces:"
-        (Get-NetAdapter | Select-Object Name, InterfaceDescription, Status) | Out-Host
-        do {
-            $netInterfaceName = Read-Host "New Network Interface Name"
-            $netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
-        } while ($netAdapter -eq $null)
-    }
-    "2"     { 
-        $response = Read-Host "Enable IPv4? (Y/n)"
-        if ($response.ToUpper() -eq "Y"){
-            $enableIpv4 = $true
-        } 
-        elseif ($response.ToUpper() -eq "N") {
-            $enableIpv4 = $false
+        # IPv4
+        if ($enableIpv4 -eq $true){
+            if (($netInterfaceName -eq "") -or
+                ($netInterfaceIpv4 -eq "") -or 
+                ($netInterfaceGatewayv4 -eq "") -or
+                ($netInterfaceNetMaskv4 -eq "") -or
+                ($netInterfaceDnsv4 -eq "")){
+                    $warningMessage = "IPv4 settings are missing. Script will not start."
+                    continue
+                }
         }
-    }
-    "3"     { 
-        $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
-        do {
-            $netInterfaceIpv4 = Read-Host "New IPv4 Address"
-        } while ($netInterfaceIpv4 -notmatch $pattern)  
-    }
-    "4"     { 
-        $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
-        do {
-            $netInterfaceGatewayv4 = Read-Host "New IPv4 Gateway" 
-        } while ($netInterfaceGatewayv4 -notmatch $pattern)  
-    }
-    "5"     { $netInterfaceNetMaskv4 = Read-Host "New IPv4 Net Mask (ex: 24)"}
-    "6"     { $netInterfaceDnsv4 = Read-Host "New IPv4 DNS Servers separated by commas" }
-    "7"     { 
-        $response = Read-Host "Enable IPv6? (Y/n)"
-        if ($response.ToUpper() -eq "Y"){
-            $enableIpv6 = $true
-        } 
-        elseif ($response.ToUpper() -eq "N") {
-            $enableIpv6 = $false
-        }        
-    }
-    "8"     { $netInterfaceIpv6 = Read-Host "New IPv6 Address" }
-    "9"     { $netInterfaceGatewayv6 = Read-Host "New IPv6 Gateway"}
-    "10"    { $netInterfaceDnsv6 = Read-Host "New IPv6 DNS Servers separated by commas" }
-    "11"    {
-        $pattern = '(?i)(?=.{1,15}$)^(([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])\.)*([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])$' 
-        do {
-            $hostname = Read-Host "New Hostname (max. 15 characters)" 
-        } while ($hostname -notmatch $pattern)
-    }
-    "12"    { 
-        do{
-            $timezone = Read-Host "New Time Zone" 
-            $lookupTimezone = Get-TimeZone -ListAvailable | ? {$_.Id -eq $timezone}
-        } while ($lookupTimezone -eq $null)
-    }
-    "13"    { $domain = Read-Host "New Domain" }
-    "14"    { $domainAdminUser = Read-Host "New Domain Admin User"}
-    "15"    { 
-        $response = Read-Host "Join computer do domain? (Y/n)"
-        if ($response.ToUpper() -eq "Y"){
-            $joinToDomain = $true
-        } 
-        elseif ($response.ToUpper() -eq "N") {
-            $joinToDomain = $false
-        }        
-    }
-    default { }
-}
 
-cls
+        # IPv6
+        if ($enableIpv6 -eq $true){
+            if (($netInterfaceName -eq "") -or
+                ($netInterfaceIpv6 -eq "") -or 
+                ($netInterfaceGatewayv6 -eq "") -or
+                ($netInterfaceDnsv6 -eq "")){
+                    $warningMessage = "IPv6 settings are missing. Script will not start."
+                    continue
+                }
+        }
 
+        # Domain
+        if ($joinToDomain -eq $true){
+            if (($domain -eq "") -or
+                ($domainAdminUser -eq "") -or
+                ($hostname -eq "")){
+                    $warningMessage = "Domain settings are missing. Script will not start."
+                    continue
+                }
+        }
+
+        break
+    }
+
+    switch ($option){
+        "1"     { 
+            Write-Host "Available Network Interfaces:"
+            (Get-NetAdapter | Select-Object Name, InterfaceDescription, Status) | Out-Host
+            do {
+                $netInterfaceName = Read-Host "New Network Interface Name"
+                $netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
+            } while ($netAdapter -eq $null)
+        }
+        "2"     { 
+            $response = Read-Host "Enable IPv4? (Y/n)"
+            if ($response -eq "Y"){
+                $enableIpv4 = $true
+            } 
+            elseif ($response -eq "N") {
+                $enableIpv4 = $false
+            }
+        }
+        "3"     { 
+            $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+            do {
+                $netInterfaceIpv4 = Read-Host "New IPv4 Address"
+            } while ($netInterfaceIpv4 -notmatch $pattern)  
+        }
+        "4"     { 
+            $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+            do {
+                $netInterfaceGatewayv4 = Read-Host "New IPv4 Gateway" 
+            } while ($netInterfaceGatewayv4 -notmatch $pattern)  
+        }
+        "5"     { $netInterfaceNetMaskv4 = Read-Host "New IPv4 Net Mask (ex: 24)"}
+        "6"     { $netInterfaceDnsv4 = Read-Host "New IPv4 DNS Servers separated by commas" }
+        "7"     { 
+            $response = Read-Host "Enable IPv6? (Y/n)"
+            if ($response -eq "Y"){
+                $enableIpv6 = $true
+            } 
+            elseif ($response -eq "N") {
+                $enableIpv6 = $false
+            }        
+        }
+        "8"     { $netInterfaceIpv6 = Read-Host "New IPv6 Address" }
+        "9"     { $netInterfaceGatewayv6 = Read-Host "New IPv6 Gateway"}
+        "10"    { $netInterfaceDnsv6 = Read-Host "New IPv6 DNS Servers separated by commas" }
+        "11"    {
+            $pattern = '(?i)(?=.{1,15}$)^(([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])\.)*([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])$' 
+            do {
+                $hostname = Read-Host "New Hostname (max. 15 characters)" 
+            } while ($hostname -notmatch $pattern)
+        }
+        "12"    { 
+            do {
+                $timezone = Read-Host "New Time Zone" 
+                $lookupTimezone = Get-TimeZone -ListAvailable | ? {$_.Id -eq $timezone}
+            } while ($lookupTimezone -eq $null)
+        }
+        "13"    { $domain = Read-Host "New Domain" }
+        "14"    { $domainAdminUser = Read-Host "New Domain Admin User"}
+        "15"    { 
+            $response = Read-Host "Join computer do domain? (Y/n)"
+            if ($response -eq "Y"){
+                $joinToDomain = $true
+            } 
+            elseif ($response -eq "N") {
+                $joinToDomain = $false
+            }        
+        }
+        default { }
+    }
+
+    $warningMessage = $null
 }
 #endregion
 
@@ -211,6 +223,7 @@ else {
         # IPv4
         if ($enableIpv4 -eq $false) {
             Disable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip
+            Write-Success "Successfully disabled IPv4." 
         }     
         else {
             # Make sure IPv4 is enabled on the interface
@@ -234,17 +247,20 @@ else {
 
             # Configure the DNS servers
             $netAdapter | Set-DnsClientServerAddress -ServerAddresses $netInterfaceDnsv4
+
+            Write-Success "Successfully changed IPv4 settings."
         }
 
         # IPv6
         if ($enableIpv6 -eq $false){
             Disable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip6
+            Write-Success "Successfully disabled IPv6." 
         } 
         else {
             Enable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip6      
+            Write-Success "Successfully changed IPv6 settings." 
         }
 
-        Write-Host "Successfully changed Network Settings." -ForegroundColor Green
     }
     catch {
         Write-Warning "Could not change network settings. Check interface name."
@@ -256,14 +272,28 @@ else {
 #region HOSTNAME_AND_DOMAIN_JOIN
 Write-Host "`r`nStep: Hostname and Domain Join"
 
-try{
-    if ($joinToDomain -eq $true) {
-        Add-Computer -DomainName $domain -NewName $hostname -Credential $domain\$domainAdminUser -ErrorAction Stop
-        Write-Host "Successfully joined $($domain) with new computer name $($hostname)." -ForegroundColor Green
+try {
+    if ($hostname -eq "") {
+        Write-Host "Hostname was not specified, skipping step..."
     } 
+    elseif ($hostname -eq $env:computername) {
+        if ($joinToDomain -eq $true) {
+            Add-Computer -DomainName $domain -Credential $domain\$domainAdminUser -ErrorAction Stop
+            Write-Success "Successfully joined '$($domain)'." 
+        }
+        else {
+            Write-Host "Computer hostname is already '$($hostname)', skipping step..."
+        }
+    }
     else {
-        Rename-Computer -NewName $hostname -ErrorAction Stop
-        Write-Host "Successfully changed computer name to $($hostname)." -ForegroundColor Green
+        if ($joinToDomain -eq $true) {
+            Add-Computer -DomainName $domain -NewName $hostname -Credential $domain\$domainAdminUser -ErrorAction Stop
+            Write-Success "Successfully joined '$($domain)' with new computer name '$($hostname)'."
+        }
+        else {
+            Rename-Computer -NewName $hostname -ErrorAction Stop
+            Write-Success "Successfully changed computer name to '$($hostname)'."
+        }
     }
 }
 catch {
@@ -277,7 +307,7 @@ Write-Host "`r`nStep: Time Zone"
 
 try {
     Set-TimeZone -Id $timezone
-    Write-Host "Successfully changed Time Zone to  $($timezone)." -ForegroundColor Green
+    Write-Success "Successfully changed Time Zone to '$($timezone)'."
 }
 catch {
      Write-Warning -Message $("Error changing Time Zone.`r`nError: "+ $_.Exception.Message)
