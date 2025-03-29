@@ -44,11 +44,13 @@ $joinToDomain = $false
 
 ### Network
 
-Usually, the name of the network interface is `Ethernet0`, at least on VM's created on VMWare.
+> [!WARNING] 
+> IPv6 is not fully implemented yet. Currently only the enable function is working.
 
+Be sure to set the correct network interface name before starting execution. The interactive menu on the script will guide you through choosing the correct one.  
 The rest of the network configuration is self-explanatory.  
 
->**Note:** If the `$enableIpv4` or `$enableIpv6` is set to **false**, it will disable the respective component on the network interface. 
+If the `$enableIpv4` or `$enableIpv6` is set to **false**, it will disable the respective component on the network interface. 
 
 ### General
 

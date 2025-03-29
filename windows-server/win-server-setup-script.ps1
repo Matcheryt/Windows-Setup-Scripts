@@ -43,25 +43,15 @@ This script changes system settings, and can potentially break things.
 Ensure you have a snapshot/backup before running this.
 "@ -ForegroundColor Black -BackgroundColor Yellow
 
-$disclaimerInput = Read-Host "Do you want to continue? (Y/n)"
+do {
+    $disclaimerInput = Read-Host "Do you want to continue? (Y/n)"
+} until ($disclaimerInput.ToUpper() -in "Y", "N")
 
-while ($True) {
-    if (($disclaimerInput.ToUpper() -ne "Y") -and ($disclaimerInput.ToUpper() -ne "N")){
-        $disclaimerInput = Read-Host "Do you want to continue? (Y/n)"
-        continue
-    }
-
-    switch($disclaimerInput) {
-        "Y" { $hasReadDisclaimer = $True  }
-        "N" { $hasReadDisclaimer = $False }
-    }
-
-    break
-}
-
-if ($hasReadDisclaimer -eq $False) {
+if ($disclaimerInput -eq "N") {
     Exit
 }
+
+cls
 #endregion
 
 #region USER_INPUTS
@@ -96,7 +86,14 @@ if ($option.ToUpper() -eq "START"){
 }
 
 switch ($option){
-    "1"     { $netInterfaceName = Read-Host "New Network Interface Name" }
+    "1"     { 
+        Write-Host "Available Network Interfaces:"
+        (Get-NetAdapter | Select-Object Name, InterfaceDescription, Status) | Out-Host
+        do {
+            $netInterfaceName = Read-Host "New Network Interface Name"
+            $netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
+        } while ($netAdapter -eq $null)
+    }
     "2"     { 
         $response = Read-Host "Enable IPv4? (Y/n)"
         if ($response.ToUpper() -eq "Y"){
@@ -106,8 +103,18 @@ switch ($option){
             $enableIpv4 = $false
         }
     }
-    "3"     { $netInterfaceIpv4 = Read-Host "New IPv4 Address" }
-    "4"     { $netInterfaceGatewayv4 = Read-Host "New IPv4 Gateway" }
+    "3"     { 
+        $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        do {
+            $netInterfaceIpv4 = Read-Host "New IPv4 Address"
+        } while ($netInterfaceIpv4 -notmatch $pattern)  
+    }
+    "4"     { 
+        $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
+        do {
+            $netInterfaceGatewayv4 = Read-Host "New IPv4 Gateway" 
+        } while ($netInterfaceGatewayv4 -notmatch $pattern)  
+    }
     "5"     { $netInterfaceNetMaskv4 = Read-Host "New IPv4 Net Mask (ex: 24)"}
     "6"     { $netInterfaceDnsv4 = Read-Host "New IPv4 DNS Servers separated by commas" }
     "7"     { 
@@ -122,7 +129,12 @@ switch ($option){
     "8"     { $netInterfaceIpv6 = Read-Host "New IPv6 Address" }
     "9"     { $netInterfaceGatewayv6 = Read-Host "New IPv6 Gateway"}
     "10"    { $netInterfaceDnsv6 = Read-Host "New IPv6 DNS Servers separated by commas" }
-    "11"    { $hostname = Read-Host "New Hostname" }
+    "11"    {
+        $pattern = '(?i)(?=.{1,15}$)^(([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])\.)*([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])$' 
+        do {
+            $hostname = Read-Host "New Hostname (max. 15 characters)" 
+        } while ($hostname -notmatch $pattern)
+    }
     "12"    { $timezone = Read-Host "New Time Zone" }
     "13"    { $domain = Read-Host "New Domain" }
     "14"    { $domainAdminUser = Read-Host "New Domain Admin User"}
