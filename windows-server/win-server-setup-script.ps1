@@ -82,6 +82,42 @@ while ($True) {
 $option = Read-Host "Select an option to change or type 'start' to run the script with the options above" 
 
 if ($option.ToUpper() -eq "START"){
+    
+    # Verify everything is filled correctly before starting
+
+    # IPv4
+    if ($enableIpv4 -eq $true){
+        if (($netInterfaceName -eq "") -or
+            ($netInterfaceIpv4 -eq "") -or 
+            ($netInterfaceGatewayv4 -eq "") -or
+            ($netInterfaceNetMaskv4 -eq "") -or
+            ($netInterfaceDnsv4 -eq "")){
+                Write-Warning "IPv4 settings are missing. Script will not start."
+                return
+            }
+    }
+
+    # IPv6
+    if ($enableIpv6 -eq $true){
+        if (($netInterfaceName -eq "") -or
+            ($netInterfaceIpv6 -eq "") -or 
+            ($netInterfaceGatewayv6 -eq "") -or
+            ($netInterfaceDnsv6 -eq "")){
+                Write-Warning "IPv6 settings are missing. Script will not start."
+                return
+            }
+    }
+
+    # Domain
+    if ($joinToDomain -eq $true){
+        if (($domain -eq "") -or
+            ($domainAdminUser -eq "") -or
+            ($hostname -eq "")){
+                Write-Warning "Domain settings are missing. Script will not start."
+                return
+            }
+    }
+
     break
 }
 
@@ -135,7 +171,12 @@ switch ($option){
             $hostname = Read-Host "New Hostname (max. 15 characters)" 
         } while ($hostname -notmatch $pattern)
     }
-    "12"    { $timezone = Read-Host "New Time Zone" }
+    "12"    { 
+        do{
+            $timezone = Read-Host "New Time Zone" 
+            $lookupTimezone = Get-TimeZone -ListAvailable | ? {$_.Id -eq $timezone}
+        } while ($lookupTimezone -eq $null)
+    }
     "13"    { $domain = Read-Host "New Domain" }
     "14"    { $domainAdminUser = Read-Host "New Domain Admin User"}
     "15"    { 
@@ -162,7 +203,7 @@ $netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
 
 if ($netAdapter -eq $null) {
 
-    Write-Host "Could not change network settings. Check interface name." -ForegroundColor Red
+    Write-Warning "Could not change network settings. Check interface name."
     $failureCount = $failureCount + 1
 } 
 else {
@@ -172,6 +213,9 @@ else {
             Disable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip
         }     
         else {
+            # Make sure IPv4 is enabled on the interface
+            Enable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip
+
             # Clear existing configuration on the network interface
             if (($netAdapter | Get-NetIPConfiguration).IPv4Address.IPAddress) {
                 $netAdapter | Remove-NetIPAddress -AddressFamily "IPv4" -Confirm:$false
@@ -190,10 +234,6 @@ else {
 
             # Configure the DNS servers
             $netAdapter | Set-DnsClientServerAddress -ServerAddresses $netInterfaceDnsv4
-
-            # Disable IPv6 
-            # TODO
-            # Disable-NetAdapterBinding -Name $netAdapter -ComponentID ms_tcpip6
         }
 
         # IPv6
@@ -201,13 +241,13 @@ else {
             Disable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip6
         } 
         else {
-            # TODO        
+            Enable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip6      
         }
 
         Write-Host "Successfully changed Network Settings." -ForegroundColor Green
     }
     catch {
-        Write-Host "Could not change network settings. Check interface name." -ForegroundColor Red
+        Write-Warning "Could not change network settings. Check interface name."
         $failureCount = $failureCount + 1
     }
 }
@@ -247,10 +287,10 @@ catch {
 
 # If there has been any failure during runtime, then DO NOT restart automatically
 if ($failureCount -gt 0){
-    Write-Host "`r`nThe script has failed to change some settings, so it will not restart the computer automatically." -ForegroundColor Yellow
+    Write-Warning "`r`nThe script has failed to change some settings, so it will not restart the computer automatically."
 } 
 else {
-    Write-Host "Rebooting in 10 seconds... CTRL+C to cancel reboot"
+    Write-Host "`r`nRebooting in 10 seconds... CTRL+C to cancel reboot"
     Sleep 10
     Restart-Computer
 }
