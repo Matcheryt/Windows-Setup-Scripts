@@ -26,7 +26,7 @@ $netInterfaceDnsv6 = ""
 #
 # -------------- GENERAL --------------
 #
-$hostname = (hostname)
+$hostname = $env:computername
 $timezone = "GMT Standard Time" 
 #
 # -------------- DOMAIN ---------------
@@ -57,13 +57,13 @@ if ($disclaimerInput -eq "N") {
     Exit
 }
 
-cls
+Clear-Host
 #endregion
 
 #region USER_INPUTS
 while ($True) {
 
-    cls
+    Clear-Host
 
     Write-Host @"
 
@@ -73,7 +73,7 @@ while ($True) {
        2.  Enable IPv4?              $($enableIpv4)                         
        3.  IPv4                      $($netInterfaceIpv4)                   
        4.  IPv4 Gateway              $($netInterfaceGatewayv4)              
-       5.  IPv4 Net Mask             $($netInterfaceNetMaskv4)              
+       5.  IPv4 Net Mask (CIDR)      $($netInterfaceNetMaskv4)              
        6.  IPV4 DNS Servers          $($netInterfaceDnsv4)                  
        7.  Enable IPv6?              $($enableIpv6)                         
        8.  IPv6                      $($netInterfaceIpv6)                   
@@ -87,114 +87,133 @@ while ($True) {
 
 "@
 
-    if ($warningMessage -ne $null){
+    if ($null -ne $warningMessage) {
         Write-Warning "$($warningMessage)"
         Write-Host "" # Just for extra blank space. If I add a newline on the warning above, the background of the warning shifts down as well, so it needs to be like this.
     }
 
     $option = Read-Host "Select an option to change or type 'start' to run the script with the options above" 
 
-    if ($option -eq "start"){
+    if ($option -eq "start") {
         
         # Verify everything is filled correctly before starting
 
         # IPv4
-        if ($enableIpv4 -eq $true){
+        if ($enableIpv4 -eq $true) {
             if (($netInterfaceName -eq "") -or
                 ($netInterfaceIpv4 -eq "") -or 
                 ($netInterfaceGatewayv4 -eq "") -or
                 ($netInterfaceNetMaskv4 -eq "") -or
-                ($netInterfaceDnsv4 -eq "")){
-                    $warningMessage = "IPv4 settings are missing. Script will not start."
-                    continue
-                }
+                ($netInterfaceDnsv4 -eq "")) {
+                $warningMessage = "IPv4 settings are missing. Script will not start."
+                continue
+            }
         }
 
         # IPv6
-        if ($enableIpv6 -eq $true){
+        if ($enableIpv6 -eq $true) {
             if (($netInterfaceName -eq "") -or
                 ($netInterfaceIpv6 -eq "") -or 
                 ($netInterfaceGatewayv6 -eq "") -or
-                ($netInterfaceDnsv6 -eq "")){
-                    $warningMessage = "IPv6 settings are missing. Script will not start."
-                    continue
-                }
+                ($netInterfaceDnsv6 -eq "")) {
+                $warningMessage = "IPv6 settings are missing. Script will not start."
+                continue
+            }
         }
 
         # Domain
-        if ($joinToDomain -eq $true){
+        if ($joinToDomain -eq $true) {
             if (($domain -eq "") -or
                 ($domainAdminUser -eq "") -or
-                ($hostname -eq "")){
-                    $warningMessage = "Domain settings are missing. Script will not start."
-                    continue
-                }
+                ($hostname -eq "")) {
+                $warningMessage = "Domain settings are missing. Script will not start."
+                continue
+            }
         }
 
         break
     }
 
-    switch ($option){
-        "1"     { 
+    switch ($option) {
+        "1" { 
             Write-Host "Available Network Interfaces:"
             (Get-NetAdapter | Select-Object Name, InterfaceDescription, Status) | Out-Host
             do {
                 $netInterfaceName = Read-Host "New Network Interface Name"
-                $netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
-            } while ($netAdapter -eq $null)
+                $netAdapter = Get-NetAdapter | Where-Object { $_.Name -eq $netInterfaceName }
+            } while ($null -eq $netAdapter)
+
+            # Get current IP configuration for the specified interface
+            $currentIpConfiguration = Get-NetIPConfiguration | Where-Object { $_.InterfaceAlias -eq $netInterfaceName }
+
+            # IPv4 configuration
+            $netInterfaceIpv4 = $currentIpConfiguration.IPv4Address.IPAddress
+            $netInterfaceNetMaskv4 = $currentIpConfiguration.IPv4Address.PrefixLength
+            $netInterfaceGatewayv4 = $currentIpConfiguration.Ipv4DefaultGateway.NextHop
+            $netInterfaceDnsv4 = ($currentIpConfiguration.DNSServer | Where-Object { $_.AddressFamily -eq 2 }).ServerAddresses -join ","
+
+            # IPv6 configuration
+            $netInterfaceIpv6 = $currentIpConfiguration.IPv6Address.IPAddress
+            #$netInterfaceIpv6Prefix = $currentIpConfiguration.IPv6Address.PrefixLength
+            $netInterfaceDnsv6 = ($currentIpConfiguration.DNSServer | Where-Object { $_.AddressFamily -eq 23 }).ServerAddresses -join ","
         }
-        "2"     { 
+        "2" { 
             $response = Read-Host "Enable IPv4? (Y/n)"
-            if ($response -eq "Y"){
+            if ($response -eq "Y") {
                 $enableIpv4 = $true
             } 
             elseif ($response -eq "N") {
                 $enableIpv4 = $false
             }
         }
-        "3"     { 
+        "3" { 
             $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
             do {
                 $netInterfaceIpv4 = Read-Host "New IPv4 Address"
             } while ($netInterfaceIpv4 -notmatch $pattern)  
         }
-        "4"     { 
+        "4" { 
             $pattern = '^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$'
             do {
                 $netInterfaceGatewayv4 = Read-Host "New IPv4 Gateway" 
             } while ($netInterfaceGatewayv4 -notmatch $pattern)  
         }
-        "5"     { $netInterfaceNetMaskv4 = Read-Host "New IPv4 Net Mask (ex: 24)"}
-        "6"     { $netInterfaceDnsv4 = Read-Host "New IPv4 DNS Servers separated by commas" }
-        "7"     { 
+        "5" { $netInterfaceNetMaskv4 = Read-Host "New IPv4 Net Mask in CIDR format (ex: 24)" }
+        "6" { 
+            $pattern = '((25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)\.(25[0-5]|2[0-4]\d|[01]?\d\d?)(,\n|,?$))'
+            do {
+                $netInterfaceDnsv4 = Read-Host "New IPv4 DNS Servers separated by commas (ex: 1.1.1.1,1.0.0.1)" 
+            } while ($netInterfaceDnsv4 -notmatch $pattern)
+        }
+        "7" { 
             $response = Read-Host "Enable IPv6? (Y/n)"
-            if ($response -eq "Y"){
+            if ($response -eq "Y") {
                 $enableIpv6 = $true
             } 
             elseif ($response -eq "N") {
                 $enableIpv6 = $false
             }        
         }
-        "8"     { $netInterfaceIpv6 = Read-Host "New IPv6 Address" }
-        "9"     { $netInterfaceGatewayv6 = Read-Host "New IPv6 Gateway"}
-        "10"    { $netInterfaceDnsv6 = Read-Host "New IPv6 DNS Servers separated by commas" }
-        "11"    {
+        "8" { $netInterfaceIpv6 = Read-Host "New IPv6 Address" }
+        "9" { $netInterfaceGatewayv6 = Read-Host "New IPv6 Gateway" }
+        "10" { $netInterfaceDnsv6 = Read-Host "New IPv6 DNS Servers separated by commas" }
+        "11" {
             $pattern = '(?i)(?=.{1,15}$)^(([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])\.)*([a-z\d]|[a-z\d][a-z\d\-]*[a-z\d])$' 
             do {
                 $hostname = Read-Host "New Hostname (max. 15 characters)" 
             } while ($hostname -notmatch $pattern)
         }
-        "12"    { 
+        "12" { 
             do {
                 $timezone = Read-Host "New Time Zone" 
-                $lookupTimezone = Get-TimeZone -ListAvailable | ? {$_.Id -eq $timezone}
-            } while ($lookupTimezone -eq $null)
+                $lookupTimezone = Get-TimeZone -ListAvailable | Where-Object { $_.Id -eq $timezone }
+            } while ($null -eq $lookupTimezone)
         }
-        "13"    { $domain = Read-Host "New Domain" }
-        "14"    { $domainAdminUser = Read-Host "New Domain Admin User"}
-        "15"    { 
+        "13" { $domain = Read-Host "New Domain" }
+        "14" { $domainAdminUser = Read-Host "New Domain Admin User" }
+        "15" { 
             $response = Read-Host "Join computer do domain? (Y/n)"
-            if ($response -eq "Y"){
+            if ($response -eq "Y") {
                 $joinToDomain = $true
             } 
             elseif ($response -eq "N") {
@@ -211,9 +230,9 @@ while ($True) {
 #region NETWORK
 Write-Host "`r`nStep: Network Settings"
 
-$netAdapter = Get-NetAdapter | ? {$_.Name -eq $netInterfaceName}
+$netAdapter = Get-NetAdapter | Where-Object { $_.Name -eq $netInterfaceName }
 
-if ($netAdapter -eq $null) {
+if ($null -eq $netAdapter) {
 
     Write-Warning "Could not change network settings. Check interface name."
     $failureCount = $failureCount + 1
@@ -240,10 +259,10 @@ else {
 
             # Configure the IP address and default gateway
             $netAdapter | New-NetIPAddress `
-            -AddressFamily "IPv4" `
-            -IPAddress $netInterfaceIpv4 `
-            -PrefixLength $netInterfaceNetMaskv4 `
-            -DefaultGateway $netInterfaceGatewayv4  
+                -AddressFamily "IPv4" `
+                -IPAddress $netInterfaceIpv4 `
+                -PrefixLength $netInterfaceNetMaskv4 `
+                -DefaultGateway $netInterfaceGatewayv4  
 
             # Configure the DNS servers
             $netAdapter | Set-DnsClientServerAddress -ServerAddresses $netInterfaceDnsv4
@@ -252,7 +271,7 @@ else {
         }
 
         # IPv6
-        if ($enableIpv6 -eq $false){
+        if ($enableIpv6 -eq $false) {
             Disable-NetAdapterBinding -Name $netInterfaceName -ComponentID ms_tcpip6
             Write-Success "Successfully disabled IPv6." 
         } 
@@ -297,8 +316,8 @@ try {
     }
 }
 catch {
-     Write-Warning -Message $("Error while performing step.`r`nError: "+ $_.Exception.Message)
-     $failureCount = $failureCount + 1
+    Write-Warning -Message $("Error while performing step.`r`nError: " + $_.Exception.Message)
+    $failureCount = $failureCount + 1
 }
 #endregion
 
@@ -310,17 +329,17 @@ try {
     Write-Success "Successfully changed Time Zone to '$($timezone)'."
 }
 catch {
-     Write-Warning -Message $("Error changing Time Zone.`r`nError: "+ $_.Exception.Message)
-     $failureCount = $failureCount + 1
+    Write-Warning -Message $("Error changing Time Zone.`r`nError: " + $_.Exception.Message)
+    $failureCount = $failureCount + 1
 }
 #endregion
 
 # If there has been any failure during runtime, then DO NOT restart automatically
-if ($failureCount -gt 0){
+if ($failureCount -gt 0) {
     Write-Warning "`r`nThe script has failed to change some settings, so it will not restart the computer automatically."
 } 
 else {
     Write-Host "`r`nRebooting in 10 seconds... CTRL+C to cancel reboot"
-    Sleep 10
+    Start-Sleep 10
     Restart-Computer
 }
